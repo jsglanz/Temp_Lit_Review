@@ -1,0 +1,509 @@
+---
+title: "Temperature Logger Literature Review Summary"
+author: "Jess S. Glanz, Joint Research Specialist"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+mainfont: SourceSansPro
+header-includes:
+- \usepackage[default]{sourcesanspro}
+- \usepackage[T1]{fontenc}
+---
+
+```{r LoadPackages, results="hide",message=FALSE,echo=FALSE}
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(RColorBrewer)
+library(ggrepel)
+library(png)
+library(ggstatsplot)
+library(egg)
+library(leaflet.minicharts)
+library(leaflet)
+library(gt)
+library(plotly)
+library(ggpubr)
+```
+
+```{r LoadData1, results="hide",message=FALSE,warning=FALSE,echo=FALSE}
+ls<- read.csv('ls.csv')
+lst<- read.csv('LitSum_Table.csv')
+lsst<-read.csv('ls_st.csv')
+```
+
+```{r Tidy Data, results="hide",message=FALSE,warning=FALSE,echo=FALSE}
+ls$dummy<-1 #add dummy variable
+
+ls<- ls %>% mutate(bb =
+                      case_when(Brand == "Onset Computer Corporation" ~ "Onset",
+                                Brand == "Sea-Bird Scientific" ~ "Sea-Bird",
+                                Brand == "Not mentioned" ~ "Not Mentioned",
+                                Brand == "RBR" ~ "RBR",
+                                Brand == "ReefNet" ~ "ReefNet",
+                                Brand == "Aanderaa" ~ "Other",
+                                Brand == "Alec Electronics Co" ~ "Other",
+                                Brand == "Aquatec" ~ "Other",
+                                Brand == "Dataflow Systems Ltd" ~ "Other",
+                                Brand == "DTS" ~ "Other", 
+                                Brand == "Eureka Water Probes" ~ "Other",
+                                Brand == "Gemini Data Loggers Ltd" ~ "Other",
+                                Brand == "General Oceanics" ~ "Other",
+                                Brand == "Hugrun (now Star-Oddi)" ~ "Other",
+                                Brand == "Innovasea VR2Tx " ~ "Other",
+                                Brand == "Lowell Instruments" ~ "Other",
+                                Brand == "Marine Geophysics Lab" ~ "Other",
+                                Brand == "Maxim Integrated Products" ~ "Other",
+                                Brand == "Nortek" ~ "Other",
+                                Brand == "Opuhala " ~ "Other",
+                                Brand == "Ryan Industries" ~ "Other",
+                                Brand == "Precision Measurement Engineering Inc" ~ "Other", 
+                                Brand == "Royal Netherlands Institute for Sea Research" ~ "Other",
+                                Brand == "Sensornet" ~ "Other",
+                                Brand == "Teledyne Marine" ~ "Other",
+                                Brand == "U Beratherm and Grant Squirrel" ~ "Other",
+                                Brand == "Vemco" ~ "Other",
+                                Brand == "Yellow Springs Instruments" ~ "Other"),
+                    .after=Brand)
+
+```
+
+```{r BrandFreq, results="hide",message=FALSE,warning=FALSE, echo=FALSE}
+my_tab <- table(ls$Brand)                                  # Create frequency table
+my_tab_prob <- (my_tab / sum(my_tab))*100
+
+unique(ls$DOI) #Total studies: 329
+length(ls$DOI) #Total studies with separation when more than one logger was used in a study: 397
+#median(df$Freq1)
+
+df <- ls %>%
+  filter(duplicated(DOI) == TRUE)
+
+unique(df$DOI) #Total studies: 51
+
+
+
+```
+
+## Quick Stats
+
+```{r RenameColumns, results="show",message=FALSE,warning=FALSE, echo=FALSE}
+gt_tbl <- 
+  gt(lst) |>
+  tab_spanner(
+    label = "Shading",
+    columns = c(Mentioned, Brand..Onset)
+  ) |>
+  tab_spanner(
+    label = "Depth",
+    columns = c(X.5m, Not.mentioned)
+  ) |>
+   tab_spanner(
+    label = "Frequency",
+    columns = c(Median..minutes., Mean..minutes.,Not.mentioned.1)
+  ) |>
+   tab_spanner(
+    label = "Calibrated",
+    columns = c(Yes)
+  ) |>
+   tab_spanner(
+    label = "Data Available",
+    columns = c(Yes.1)
+  ) |>
+  cols_label(
+    X = "",
+    Brand..Onset = "Brand: Onset",
+    X.5m = "≤5m",
+    Not.mentioned = "Not mentioned",
+    Median..minutes. = "Median (minutes)",
+    Mean..minutes. = "Mean (minutes)",
+    Not.mentioned.1 = "Not mentioned",
+    Yes.1 = "Yes"
+  )
+
+# Show the gt table
+gt_tbl
+```
+
+```{r blah, results="show",message=FALSE,warning=FALSE,echo=FALSE}
+lsb1 <- ls %>%
+  group_by(bb) %>%
+  summarise(count=sum(dummy))
+
+lsb1$p<-lsb1$count/(sum(lsb1$count))*100
+```
+
+## What loggers are being used?
+
+More than 60% of reviewed literature used loggers made by Onset Computer Corporation. The dominant sensor was from the HOBO Pendant series with HOBO Pro's closely following. Nearly 20% of studies did not identify which HOBO logger they used ("Not mentioned", "HOBO").
+
+Of the studies using Sea-Bird Scientific, the second most common logger brand, models SBE 37 and 39 made up about half.
+
+```{r blah1, results="show",message=FALSE,warning=FALSE,echo=FALSE, fig.width=8, fig.height=4}
+lsb1%>%
+mutate(bb = factor(bb, levels=c("Onset","Sea-Bird","RBR","ReefNet","Other","Not Mentioned"))) %>%
+ggplot(aes(bb,p, fill=bb)) +  
+  geom_col() +
+  scale_fill_manual(values = c("navy","lightblue", "darkred","darksalmon","darkorchid","orange"))+
+   theme_bw()+
+  theme(legend.position="none")+
+  ylab("Percentage of Total Studies")+
+  xlab("Logger Brand")+
+  annotate(
+    geom = "text", x="Other",y=60,
+    label = "*'Other' groups 24 brands that were used in less than 1% of studies", hjust = 0.50, vjust = -0.5, size = 3, color="darkorchid")
+```
+
+```{r blah2, results="show",message=FALSE,warning=FALSE,echo=FALSE}
+on<-ls %>% filter(Brand=="Onset Computer Corporation")
+
+on$model[grepl("Not",on$model)]<-"Not mentioned"
+
+on1<- on %>% mutate(mod =
+                           case_when(
+                                     model=="Not mentioned"~"Other",
+                                     model=="HOBO DO Data Logger"~"Other",
+                                     model=="Stowaway XTI"~"Other",
+                                     model=="HOBO Aquapro"~"Other",
+                                     model=="Water level data logger"~"Other",
+                                     model=="Optic Stowaway"~"Other",
+                                     model=="HOBO Stowaway Tidbit"~"Other",
+                                     model=="HOBO TidbiT"~"Tidbit",
+                                     model=="HOBO Pro"~"Pro",
+                                     model=="HOBO Pendant"~"Pend",
+                                     model=="HOBO MXTemp"~"Other",
+                                     model=="HOBO MXTemp/Light"~"Other",
+                                     model=="HOBO Pendant Temp"~"Pend",
+                                     model=="HOBO Pendant Temp/Light"~"Pend-LT"))
+
+
+onm <- on1 %>%
+  group_by(mod) %>%
+  summarise(count=sum(dummy))
+
+onm$p<-onm$count/(sum(onm$count))*100
+
+#Compute the cumulative percentages (top of each rectangle)
+onm$ymax = cumsum(onm$p)
+
+#Compute the bottom of each rectangle
+onm$ymin = c(0, head(onm$ymax, n=-1))
+
+#Compute label position
+onm$labelPosition <- (onm$ymax + onm$ymin) / 2
+#
+#Compute a good label
+
+onm$label <- paste0(onm$mod, "\n  ",onm$count)#"\n  " put space between the plastic type and its count
+
+onc<-c( "#2171B5", "#08519C", "#08306B","black","#4292C6")
+
+
+
+###Seabird
+sb<-ls %>% filter(Brand=="Sea-Bird Scientific")
+
+
+sbm <- sb %>%
+  group_by(model) %>%
+  summarise(count=sum(dummy))
+
+sbm$p<-sbm$count/(sum(sbm$count))*100
+
+#Compute the cumulative percentages (top of each rectangle)
+sbm$ymax = cumsum(sbm$p)
+
+#Compute the bottom of each rectangle
+sbm$ymin = c(0, head(sbm$ymax, n=-1))
+
+#Compute label position
+sbm$labelPosition <- (sbm$ymax + sbm$ymin) / 2
+#
+#Compute a good label
+
+sbm$label <- paste0(sbm$model, "\n  ",sbm$count)#"\n  " put space between the plastic type and its count
+
+
+sbc<-c( "#C7E9B4", "#7FCDBB", "#41B6C4", "#1D91C0", "#225EA8", "#253494" ,"#081D58","#BDBDBD", "#969696", "#737373" ,"#525252" ,"#252525", "#000000")
+
+```
+
+```{r blah3, results="show",message=FALSE,warning=FALSE,echo=FALSE,fig.width=4, fig.height=4}
+# Make the plot
+j<-ggplot(onm, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=mod)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label,color=mod), size=2) +
+  scale_fill_manual(values=onc)+
+  scale_color_manual(values=onc)+
+  coord_polar(theta="y") + #turns bar plot into a ring shape
+  xlim(c(1, 4)) +
+ # theme(legend.position="none") +
+  guides(fill = "none",color="none")+
+  theme_void() #gets rid of gray background in plot
+
+#Add company logo to center of donut plot
+logo <- img<-readPNG("onset.png")
+j
+
+grid::grid.raster(logo, x = 0.5, y = 0.5, just = c('center','center'), width = unit(1.5, 'inches'))#x and y are values between 0 and 1 with 0 being the far bottom or left and 1 being the far top or right of the plot, width controls the size of the logo
+
+# Make the plot
+k<-ggplot(sbm, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=model)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label,color=model), size=2) +
+  scale_fill_manual(values=sbc)+
+  scale_color_manual(values=sbc)+
+  coord_polar(theta="y") + #turns bar plot into a ring shape
+  xlim(c(1, 4)) +
+  # theme(legend.position="none") +
+  guides(fill = "none",color="none")+
+  theme_void() #gets rid of gray background in plot
+
+#Add company logo to center of donut plot
+logo <- img<-readPNG("Seabird.png")
+k
+
+grid::grid.raster(logo, x = 0.5, y = 0.5, just = c('center','center'), width = unit(2, 'inches'))#x and y are values between 0 and 1 with 0 being the far bottom or left and 1 being the far top or right of the plot, width controls the size of the logo
+```
+
+## How are they being used?
+
+### For what and how often are measurements logged?
+
+Studies were classified under 5 types, most of which were Ecology. Loggers were set to record measurements as low as once per 0.5 seconds (Physical Oceanography) to once per day (Biogeochemistry, Ecology), although ecological studies use a greater range of logging frequencies than any other study type.
+
+```{r blah4, results="show",message=FALSE,warning=FALSE,echo=FALSE}
+
+lsf<-lsst%>%filter(Freq1!="Not mentioned")
+lsf$Freq1<-as.numeric(lsf$Freq1)
+
+
+# sample size
+sample_size = lsf %>% group_by(Study.Type) %>% summarize(num=n())
+
+blah = lsf %>% group_by(Study.Type,Freq1) %>% summarize(n=n())
+
+blah1 = lsst %>% group_by(Study.Type,Freq1) %>% summarize(n=n())
+
+blah1<-blah1 %>% filter(Freq1=="Not mentioned")
+b1w<-spread(blah1,Freq1,n)
+```
+
+```{r blah5, echo=FALSE, fig.height=5, fig.width=7.5, message=FALSE, warning=FALSE, results="show"}
+
+#blah %>%
+#  left_join(sample_size) %>%
+#  mutate(myaxis = paste0(st, "\n", "n=", num)) %>%
+ # ggplot( aes(x=Freq1, y=n)) +
+#  geom_area(aes(fill=Study.Type), alpha=0.4) +
+  #geom_line(aes(color=Study.Type),linewidth=0.5) +
+ # 
+ # scale_color_manual(values=c("#453781FF","#287D8EFF","pink","#3CBB75FF","orange")) +
+  #geom_point(aes(color=Study.Type), alpha=0.9) +
+#  theme(
+ #   legend.position="none",
+  #  plot.title = element_text(size=11)
+#  ) +
+# theme_bw()+
+#  guides(fill=FALSE, color=FALSE)+
+ # xlab("Frequency 1 (minutes)")+
+#  ylab("Count")
+ # facet_wrap(~Study.Type)
+
+#my_tag <- c("A) Biogeochemistry, n=27", "B) Ecology, n=249", "C) Physical Oceanography, n=56", "D) Management, n=3", "E) Data Validation, n=2")
+#tag_facet(p, 
+ #         x = 0, y = 55, 
+  #        vjust = 0, hjust = 0.03,
+   #       open = "", close = "",
+    #      fontface = 4,
+     #     size = 3,
+      #    family = "serif",
+       #   tag_pool = my_tag)
+
+
+###
+p1<-blah %>%
+  left_join(sample_size) %>%
+  mutate(myaxis = paste0(Study.Type, "\n", "n=", num)) %>%
+  ggplot( aes(x=Freq1, y=myaxis, fill=Study.Type)) +
+    geom_violin(width=1.4) +
+    geom_point() +
+   scale_fill_manual(values=c("#453781FF","#287D8EFF","pink","#3CBB75FF","orange")) +
+    theme_classic() +
+    theme(
+      legend.position="none",
+      plot.title = element_text(size=11)
+    ) +
+   # ggtitle("A Violin wrapping a boxplot") +
+    ylab("")+
+  xlab("Sampling Frequency (minutes)")
+
+p2<-blah1%>%
+ggplot(aes(fill=Study.Type, y=Freq1, x=n)) + 
+    geom_bar( stat="identity")+
+  scale_fill_manual(values=c("#453781FF","pink","orange")) +
+  # scale_y_discrete(limits=rev)+
+  xlab("")+
+  ylab("")+
+  guides(fill=FALSE)+
+  #scale_y_discrete(labels=myylab)+
+   theme_classic()+ #gets rid of gray background in plot
+   geom_text(aes( x=12, y="Not mentioned", label=paste0("Phys Oceanography", "\n", "n=", 23)),   
+           color="white", 
+           size=3 , angle=15 )+
+     geom_text(aes( x=60, y="Not mentioned", label=paste0("Ecology", "\n", "n=", 73)),   
+           color="white", 
+           size=3 , angle=15 )+
+   geom_text(aes( x=100, y="Not mentioned", label=paste0("Biogeochem", "\n", "n=", 10)),   
+           color="white", 
+           size=3 , angle=15 )
+
+ggarrange(p2,p1,ncol=1,nrow=2,align="v",heights = c(0.7, 2),labels = c("A", "B"))
+
+
+
+
+```
+
+### Geographic distribution of studies, their logger brands, and which studies mentioned shading or protecting loggers
+
+This map is interactive. Zoom in and out, click and drag to move around, and click on a pie chart or icon to learn more. The pie chart info is also shown in the figure below the map with regions descending from most to least number of studies.
+
+```{r blah6, results="show",message=FALSE,warning=FALSE,echo=FALSE}
+lsbs <- ls %>%
+  group_by(country,f.lat,f.lon,bb) %>%
+  summarise(count=sum(dummy))
+
+lsbsw<-spread(lsbs,bb,count)
+lsbsw[is.na(lsbsw)] <- 0
+lsbsw$Total<-lsbsw$`Not Mentioned`+lsbsw$Onset+lsbsw$Other+lsbsw$RBR+lsbsw$ReefNet+lsbsw$`Sea-Bird`
+
+colors <-c("navy","lightblue", "darkred","darksalmon","darkorchid","orange")
+
+
+
+shaded<-ls %>% filter(Shaded=="Yes")
+
+ds <- shaded %>%
+  filter(duplicated(DOI) == FALSE)
+
+icon = makeIcon("shaded2.png", "shaded2.png", 50, 50)
+```
+
+```{r blah7, echo=FALSE, fig.height=5, fig.width=10, message=FALSE, warning=FALSE, results="show"}
+
+leaflet(data=ds) %>% 
+  addTiles() %>% 
+  setView( lng = 0, lat = 0, zoom = 2 ) %>% 
+  addProviderTiles("Esri.WorldGrayCanvas") %>%
+  addMarkers(~long, ~lat,  icon=icon, popup =  ~paste(country, "<br>Brand:", Brand,
+                                                               "<br>Model:", Model,
+                                                               "<br>Study Type:", Study.Type)) %>%
+addMinicharts(lsbsw$f.lon, lsbsw$f.lat, layerId = lsbsw$country, chartdata = lsbsw[, c("Onset","Sea-Bird","RBR","ReefNet","Other","Not Mentioned")], 
+              type = "pie",
+              colorPalette = colors,
+              width = 100 * sqrt(lsbsw$Total) / sqrt(max(lsbsw$Total)))
+
+```
+
+```{r blah8, echo=FALSE, fig.height=5, fig.width=10, message=FALSE, warning=FALSE, results="hide"}
+
+ls<- ls %>% mutate(st =
+                         case_when(Study.Type == "Physical Oceanography" ~ "Physical Oceanography",
+                                   Study.Type == "Physical Oceanography?" ~ "Physical Oceanography",
+                                   Study.Type == "Physical Oceanography? " ~ "Physical Oceanography",
+                                   Study.Type == "Management" ~ "Management",
+                                   Study.Type == "Management/Data validation" ~ "Management",
+                                   Study.Type == "Management" ~ "Management",
+                                   Study.Type == "remote data validation" ~ "Physical Oceanography",
+                                   Study.Type == "Ecology" ~ "Ecology",
+                                   Study.Type == "Ecology/Physical Oceanography?" ~ "Ecology/Physical Oceanography",
+                                   Study.Type == "Biogeochemistry" ~ "Biogeochemistry",
+                                   Study.Type == "Physical Oceanography/Biogeochemistry" ~ "Physical Oceanography",
+                                   Study.Type == "Ecology/Biogeochemistry" ~ "Ecology"
+                                   
+                         ),
+                       .after=Study.Type)
+
+sta<-ls %>% 
+    group_by(bb, st) %>%
+    summarize(Count = n()) %>%
+    pivot_wider(id_cols = bb, names_from = st, values_from = Count,
+                values_fill = 0) 
+
+stal<-gather(sta,st,count, 2:6)
+```
+
+```{r blah11, echo=FALSE, fig.height=5, fig.width=7.5, message=FALSE, warning=FALSE, results="hide"}
+
+#stal %>%
+#  mutate(bb = factor(bb, levels=c("Onset","Sea-Bird","RBR","ReefNet","Other","Not Mentioned"))) %>%
+ # ggplot( aes(x=bb, y=count,fill=bb)) +
+ # geom_area(aes(fill=st), alpha=0.4) +
+#  geom_line(aes(color=st),linewidth=0.5) +
+  #scale_fill_manual(values=colors) +
+ # scale_color_manual(values=c("#453781FF","#287D8EFF","pink","#3CBB75FF","orange")) +
+# geom_bar(position="dodge", stat="identity") +
+ # theme(
+  #  legend.position="none",
+   # plot.title = element_text(size=11),
+    #axis.text.x = element_text(angle=45, vjust=.5, hjust=1)
+  #) +
+ #theme_bw()+
+#  guides(fill=FALSE, color=FALSE)+
+ # xlab("")+
+  #ylab("Count")+
+  #facet_wrap(~st)
+
+```
+
+```{r blah9, echo=FALSE, fig.height=5, fig.width=10, message=FALSE, warning=FALSE, results="hide"}
+cb<-ls %>% 
+    group_by(country, bb) %>%
+    summarize(Count = n()) %>%
+    pivot_wider(id_cols = country, names_from = bb, values_from = Count,
+                values_fill = 0) 
+
+cb$Total<-cb$`Not Mentioned`+cb$Onset+cb$Other+cb$RBR+cb$ReefNet+cb$`Sea-Bird`
+
+cbl<-gather(cb,Brand,Count,2:7)
+cbl$p<-(cbl$Count/cbl$Total)*100
+cbl2<-cbl%>%select(1:3,5)
+
+cbw<-spread(cbl2,Brand,p)
+cbw2<-cbw %>%
+    group_by(country) %>%
+    summarise_all(na.omit)
+cbw2<-cbw2 %>% arrange(desc(Total))
+
+```
+
+```{r blah10, echo=FALSE, fig.height=8, fig.width=10, message=FALSE, warning=FALSE, results="hide"}
+colors <-c("navy","lightblue", "darkred","darksalmon","darkorchid","orange")
+
+myylab <- paste(as.factor(cbl2$country), "\n(N=", cbl2$Total, ")", sep="")
+
+```
+
+```{r blah12, echo=FALSE, fig.height=8, fig.width=10, message=FALSE, warning=FALSE, results="show"}
+p<-cbl2%>%
+mutate(country = factor(country, levels=c("Australia","Florida","Hawaii","French Polynesia","Caribbean","Mexico","Japan","Line Islands","Saudi Arabia",
+         "Panama","China","United Arab Emirates","Palau","Thailand","Guam","Samoa","Texas","Bermuda","Brazil","Kenya","Taiwan","Chagos Archipelago","Jordan","New Caledonia","Philippines","Singapore","Belize","Papua New Guinea","South Africa","Bahamas","Ecuador","Egypt","Maldives","Vietnam","Cape Verde","Chile","Colombia","Costa Rica","Curacao","Fiji","India","Indonesia","Israel","Madagascar","Mauritius","Micronesia","Qatar","South Korea","Tobago","Vanuatu","Zanzibar"))) %>%
+ggplot(aes(fill=Brand, y=country, x=p)) + 
+    geom_bar(position="fill", stat="identity")+
+  scale_fill_manual(values=colors,breaks=c("Onset","Sea-Bird","RBR","ReefNet","Other","Not Mentioned"))+
+   scale_y_discrete(limits=rev)+
+  xlab("")+
+  ylab("")+
+  guides(fill=FALSE)+
+  #scale_y_discrete(labels=myylab)+
+   theme_classic() #gets rid of gray background in plot
+
+ggplotly(p)#make plot interactive
+
+
+```
