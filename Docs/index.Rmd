@@ -4,13 +4,7 @@ author: "Jess S. Glanz, Joint Research Specialist"
 date: "`r Sys.Date()`"
 output:
   html_document:
-    df_print: paged
-  pdf_document: default
-  word_document: default
-mainfont: SourceSansPro
-header-includes:
-- \usepackage[default]{sourcesanspro}
-- \usepackage[T1]{fontenc}
+    keep_md: true
 ---
 
 ```{r LoadPackages, results="hide",message=FALSE,echo=FALSE}
@@ -31,9 +25,11 @@ library(ggpubr)
 ```
 
 ```{r LoadData1, results="hide",message=FALSE,warning=FALSE,echo=FALSE}
-ls<- read.csv('ls.csv')
-lst<- read.csv('LitSum_Table.csv')
-lsst<-read.csv('ls_st.csv')
+ls<- ls
+lst<-LitSum_Table
+lsst<-ls_st
+#lst<- read.csv('LitSum_Table.csv')
+#lsst<-read.csv('ls_st.csv')
 ```
 
 ```{r Tidy Data, results="hide",message=FALSE,warning=FALSE,echo=FALSE}
